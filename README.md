@@ -1,2 +1,2 @@
 # LLMDocumentChatApp
-LLM using langchain to serve documents and question llm, in FastAPI of course
+LLM using langchain to serve documents and question LLM, in FastAPI of course
