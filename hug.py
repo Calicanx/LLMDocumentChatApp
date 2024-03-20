@@ -1,12 +1,13 @@
 from dotenv import load_dotenv
 from langchain_community.chat_models import ChatCohere
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_community.embeddings import CohereEmbeddings
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_community.vectorstores import faiss
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain.chains import create_retrieval_chain
+from langchain.chains import create_retrieval_chain, create_history_aware_retriever
+from langchain_core.messages import HumanMessage, AIMessage
 from fastapi import FastAPI
 import uvicorn
 
@@ -25,14 +26,16 @@ embeddings = CohereEmbeddings()
 @app.get("/input")
 def access_chatbot(question):
 
+    chat_history = [HumanMessage(content="Did Steve Jobs work with Wozniak?"), AIMessage(content="Yes!")]
+    context =  "Answer the user's questions based on the below context:"
+
 #prompt
-    prompt = ChatPromptTemplate.from_template("""Answer the following question based only on the provided context:
 
-    <context>
-    {context}
-    </context>
-
-    Question: {input}""")
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", "{context}"),
+        MessagesPlaceholder(variable_name="chat_history"),
+        ("user", "{input}"),
+    ])
 
 #pass document by scraping
     loader = WebBaseLoader("https://allaboutstevejobs.com/blog/")
@@ -46,9 +49,13 @@ def access_chatbot(question):
 #chain
     document_chain = create_stuff_documents_chain(llm, prompt)
     retriever = vector.as_retriever()
-    retrieval_chain = create_retrieval_chain(retriever, document_chain)
-    result = retrieval_chain.invoke({"input":question})
-
+    retriever_chain = create_history_aware_retriever(llm, retriever, prompt)
+    retrieval_chain = create_retrieval_chain(retriever_chain, document_chain)
+    result = retrieval_chain.invoke({
+        "chat_history": chat_history,
+        "input": question,
+        "context": context
+    })
     return result
 
 if __name__ == '__main__':
