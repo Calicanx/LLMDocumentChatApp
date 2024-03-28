@@ -7,7 +7,9 @@ from langchain_community.vectorstores import faiss
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains import create_retrieval_chain, create_history_aware_retriever
-from langchain_core.messages import HumanMessage, AIMessage
+#from langchain_core.messages import HumanMessage, AIMessage
+from langchain_community.document_loaders import UnstructuredFileLoader
+import os
 from fastapi import FastAPI
 import uvicorn
 
@@ -26,24 +28,26 @@ embeddings = CohereEmbeddings()
 @app.get("/input")
 def access_chatbot(question):
 
-    chat_history = [HumanMessage(content="Did Steve Jobs work with Wozniak?"), AIMessage(content="Yes!")]
-    context =  "Answer the user's questions based on the below context:"
+    #chat_history = [HumanMessage(content="Did Steve Jobs work with Wozniak?"), AIMessage(content="Yes!")]
+    context =  "Understand first then answer the user's questions by providing a specific answer from the retriever as possible"
 
 #prompt
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", "{context}"),
-        MessagesPlaceholder(variable_name="chat_history"),
+        #MessagesPlaceholder(variable_name="chat_history"),
         ("user", "{input}"),
     ])
-
-#pass document by scraping
-    loader = WebBaseLoader("https://allaboutstevejobs.com/blog/")
-    docs = loader.load()
-
+    
+#specify files
+    files = ['CIC WAY OF SELLING-SUPA.pptx', 'Product training- 2023-OCT.pptx']
+# Create a list of complete file paths by joining the directory path with each file name
+    file_paths = [os.path.join('files', file) for file in files]
 #build index
+    loader = UnstructuredFileLoader(file_paths, mode='elements')
+    data = loader.load()    
     text_splitter = RecursiveCharacterTextSplitter()
-    documents = text_splitter.split_documents(docs)
+    documents = text_splitter.split_documents(data)
     vector = faiss.FAISS.from_documents(documents, embeddings)
 
 #chain
@@ -52,7 +56,6 @@ def access_chatbot(question):
     retriever_chain = create_history_aware_retriever(llm, retriever, prompt)
     retrieval_chain = create_retrieval_chain(retriever_chain, document_chain)
     result = retrieval_chain.invoke({
-        "chat_history": chat_history,
         "input": question,
         "context": context
     })
